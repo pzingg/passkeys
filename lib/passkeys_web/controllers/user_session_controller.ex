@@ -1,8 +1,6 @@
 defmodule PasskeysWeb.UserSessionController do
   use PasskeysWeb, :controller
 
-  require Logger
-
   alias Passkeys.Accounts
   alias PasskeysWeb.UserAuth
 
@@ -14,7 +12,7 @@ defmodule PasskeysWeb.UserSessionController do
     create(conn, params, "Welcome back!")
   end
 
-  # magic link login
+  # magic link or passkey login
   defp create(conn, %{"user" => %{"token" => token} = user_params}, info) do
     case Accounts.login_user_by_magic_link(token) do
       {:ok, {user, tokens_to_disconnect}} ->
@@ -65,14 +63,5 @@ defmodule PasskeysWeb.UserSessionController do
     conn
     |> put_flash(:info, "Logged out successfully.")
     |> UserAuth.log_out_user()
-  end
-
-  def passkey_challenge(conn, _params) do
-    challenge = Wax.new_registration_challenge([])
-    Logger.debug("challenge created #{inspect(challenge)}")
-
-    conn
-    |> put_session(:webauthn_challenge, challenge)
-    |> redirect(to: ~p"/users/settings")
   end
 end

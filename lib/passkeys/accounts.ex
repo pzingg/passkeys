@@ -275,6 +275,15 @@ defmodule Passkeys.Accounts do
     UserNotifier.deliver_login_instructions(user, magic_link_url_fun.(encoded_token))
   end
 
+  def create_passkey_token(user_id) do
+    {encoded_token, user_token} =
+      get_user!(user_id)
+      |> UserToken.build_email_token("login")
+
+    Repo.insert!(user_token)
+    encoded_token
+  end
+
   @doc """
   Deletes the signed token with the given context.
   """
@@ -299,6 +308,17 @@ defmodule Passkeys.Accounts do
 
   ## User credentials
 
+  @doc """
+  List WebAuthn credentials for a user
+  """
+  def credentials_for_user_id(nil), do: []
+
+  def credentials_for_user_id(user_id) do
+    UserCredential
+    |> where([c], c.user_id == ^user_id)
+    |> Repo.all()
+  end
+
   def register_credential(
         %User{id: user_id},
         challenge,
@@ -315,13 +335,17 @@ defmodule Passkeys.Accounts do
             " and authenticator data #{inspect(authenticator_data)}"
         )
 
-        # credential id is not already in use as per bullet point 18 here:
-        # https://www.w3.org/TR/2019/PR-webauthn-20190117/#registering-a-new-credential
+        cose_key =
+          UserCredential.encode_cose_key(
+            authenticator_data.attested_credential_data.credential_public_key
+          )
+
+        maybe_aaguid = Wax.AuthenticatorData.get_aaguid(authenticator_data)
 
         attrs = %{
           id: raw_id_b64,
-          cose_key: authenticator_data.attested_credential_data.credential_public_key,
-          aaguid: Wax.AuthenticatorData.get_aaguid(authenticator_data)
+          cose_key: cose_key,
+          aaguid: maybe_aaguid
         }
 
         %UserCredential{user_id: user_id}
@@ -331,15 +355,6 @@ defmodule Passkeys.Accounts do
       {:error, _} = error ->
         error
     end
-  end
-
-  @doc """
-  List WebAuthn credentials for a user
-  """
-  def list_user_credentials(%User{id: user_id}) do
-    UserCredential
-    |> where([c], c.user_id == ^user_id)
-    |> Repo.all()
   end
 
   @doc """

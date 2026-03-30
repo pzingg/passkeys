@@ -96,15 +96,49 @@ Hooks.register_passkey = {
       navigator.credentials.create(params)
         .then(function (newCredential) {
           that.pushEvent("credential_created", {
-            raw_id: _arrayBufferToBase64(newCredential.rawId),
             type: newCredential.type,
-            client_data_json: JSON.stringify(newCredential.response.clientDataJSON),
+            raw_id: _arrayBufferToBase64(newCredential.rawId),
+            client_data_json: _arrayBufferToString(newCredential.response.clientDataJSON),
             attestation_object: _arrayBufferToBase64(newCredential.response.attestationObject)
           });
         })
         .catch(function (err) {
           console.error(err);
-          that.pushEvent("credential_failed", {error: err.message});
+          that.pushEvent("credentials_create_failed", {error: err.message});
+        });
+    });
+  }
+};
+
+Hooks.authenticate_passkey = {
+  mounted() {
+    this.handleEvent("trigger-authentication", ({challenge, cred_ids}) => {
+      const allowCredentials = cred_ids.map((cred_id) => {
+        return {id: _base64ToArrayBuffer(cred_id), type: "public-key"};
+      });
+
+      // userHandle is an ArrayBuffer containing an opaque user identifier, specified as user.id
+      // in the options passed to the originating navigator.credentials.create() call.
+
+      const that = this;
+      navigator.credentials.get({
+        publicKey: {
+          challenge: _base64ToArrayBuffer(challenge),
+          allowCredentials: allowCredentials,
+        }
+      }).then(function (newCredential) {
+        that.pushEvent("credential_selected", {
+            type: newCredential.type,
+            raw_id: _arrayBufferToBase64(newCredential.rawId),
+            client_data_json: _arrayBufferToString(newCredential.response.clientDataJSON),
+            authenticator_data: _arrayBufferToBase64(newCredential.response.authenticatorData),
+            signature: _arrayBufferToBase64(newCredential.response.signature),
+            user_handle: _arrayBufferToString(newCredential.response.userHandle)
+          });
+        })
+        .catch(function (err) {
+          console.error(err);
+          that.pushEvent("credentials_get_failed", {error: err.message});
         });
     });
   }

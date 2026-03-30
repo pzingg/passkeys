@@ -301,10 +301,10 @@ defmodule Passkeys.Accounts do
 
   def register_credential(
         %User{id: user_id},
-        attestation_object_b64,
-        client_data_json,
+        challenge,
         raw_id_b64,
-        challenge
+        attestation_object_b64,
+        client_data_json
       ) do
     attestation_object = Base.decode64!(attestation_object_b64)
 

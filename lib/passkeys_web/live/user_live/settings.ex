@@ -1,9 +1,18 @@
 defmodule PasskeysWeb.UserLive.Settings do
   use PasskeysWeb, :live_view
 
+  require Logger
+
   on_mount {PasskeysWeb.UserAuth, :require_sudo_mode}
 
   alias Passkeys.Accounts
+
+  # Idea here:
+  # On mount, need to call challenge = Wax.new_registration_challenge(opts)
+  # Store challenge data in the user session via an XHR post to a /passkeys/store-challenge URL
+  # rp_id: challenge.rp_id,
+  # challenge_b64: Base.encode64(challenge.bytes),
+  # attestation: challenge.attestation
 
   @impl true
   def render(assigns) do
@@ -68,7 +77,13 @@ defmodule PasskeysWeb.UserLive.Settings do
 
       <div class="divider" />
 
-      <h2 class="text-lg font-semibold leading-8">Credentials</h2>
+      <div id="create-passkey" phx-hook="register_passkey">
+        <.button variant="primary" phx-click="create_passkey">
+          Create passkey
+        </.button>
+      </div>
+
+      <h2 class="text-lg font-semibold leading-8">Passkeys</h2>
       <.table id="credentials" rows={@credentials}>
         <:col :let={cred} label="Credential id">{inspect(cred.id)}</:col>
         <:col :let={cred} label="Public key">{inspect(cred.cose_key)}</:col>
@@ -92,11 +107,12 @@ defmodule PasskeysWeb.UserLive.Settings do
     {:ok, push_navigate(socket, to: ~p"/users/settings")}
   end
 
-  def mount(_params, _session, socket) do
+  def mount(_params, session, socket) do
     user = socket.assigns.current_scope.user
     email_changeset = Accounts.change_user_email(user, %{}, validate_unique: false)
     password_changeset = Accounts.change_user_password(user, %{}, hash_password: false)
     credentials = Accounts.list_user_credentials(user)
+    challenge = Map.get(session, "webauthn_challenge")
 
     socket =
       socket
@@ -105,6 +121,7 @@ defmodule PasskeysWeb.UserLive.Settings do
       |> assign(:password_form, to_form(password_changeset))
       |> assign(:trigger_submit, false)
       |> assign(:credentials, credentials)
+      |> assign(:challenge, challenge)
 
     {:ok, socket}
   end
@@ -167,5 +184,72 @@ defmodule PasskeysWeb.UserLive.Settings do
       changeset ->
         {:noreply, assign(socket, password_form: to_form(changeset, action: :insert))}
     end
+  end
+
+  def handle_event("create_passkey", _params, socket) do
+    user = socket.assigns.current_scope.user
+    challenge = socket.assigns.challenge
+
+    # rp_id should come from Application.get_env...
+    socket =
+      push_event(socket, "trigger-attestation", %{
+        challenge: Base.encode64(challenge.bytes),
+        attestation: challenge.attestation,
+        rp_id: challenge.rp_id,
+        rp_name: "Passkeys",
+        user_id: user.id,
+        user_email: user.email
+      })
+
+    {:noreply, socket}
+  end
+
+  # Params coming in as
+  # %{"attestation_object" => %{}, "client_data_json" => %{}, "raw_id" => %{}, "type" => "public-key"}
+  def handle_event(
+        "credential_created",
+        %{
+          "raw_id" => raw_id_b64,
+          "type" => _type,
+          "client_data_json" => client_data_json,
+          "attestation_object" => attestation_object_b64
+        } = params,
+        socket
+      ) do
+    Logger.debug("credential created #{inspect(params)}")
+
+    client_data_json =
+      case client_data_json do
+        data when is_map(data) -> Jason.encode!(data)
+        json_str when is_binary(json_str) -> json_str
+        _ -> "{}"
+      end
+
+    socket =
+      case Accounts.register_credential(
+             socket.assigns.current_scope.user,
+             socket.assigns.challenge,
+             raw_id_b64,
+             attestation_object_b64,
+             client_data_json
+           ) do
+        {:ok, _} ->
+          put_flash(socket, :info, "Passkey registered successfully")
+
+        {:error, %Ecto.Changeset{} = changeset} ->
+          put_flash(socket, :error, "Passkey registration failed: #{inspect(changeset.errors)}")
+
+        {:error, reason} ->
+          put_flash(socket, :error, "Passkey registration failed: #{inspect(reason)}")
+      end
+
+    {:noreply, socket}
+  end
+
+  def handle_event("credential_failed", %{"error" => error} = params, socket) do
+    Logger.error("credential failed #{inspect(params)}")
+
+    socket = put_flash(socket, :error, "Passkey creation failed: #{error}")
+    {:noreply, socket}
   end
 end

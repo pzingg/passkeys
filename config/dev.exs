@@ -96,6 +96,7 @@ config :swoosh, :api_client, false
 config :wax_,
   origin: System.get_env("RP_ORIGIN", "http://localhost:4000"),
   rp_id: :auto,
+  timeout: 300,
   update_metadata: true,
   allowed_attestation_types: [:basic, :uncertain, :attca, :self],
   metadata_dir: "priv/fido2_metadata/"

@@ -25,7 +25,7 @@
           setTheme(localStorage.getItem("phx:theme") || "system");
         }
         window.addEventListener("storage", (e) => e.key === "phx:theme" && setTheme(e.newValue || "system"));
-        
+
         window.addEventListener("phx:set-theme", (e) => setTheme(e.target.dataset.phxTheme));
       })();
     </script>
@@ -37,7 +37,7 @@
           {@current_scope.user.email}
         </li>
         <li>
-          <.link href={~p"/users/settings"}>Settings</.link>
+          <.link href={~p"/users/pre-settings"}>Settings</.link>
         </li>
         <li>
           <.link href={~p"/users/log-out"} method="delete">Log out</.link>

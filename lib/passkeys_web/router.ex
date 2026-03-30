@@ -56,6 +56,7 @@ defmodule PasskeysWeb.Router do
       live "/users/settings/confirm-email/:token", UserLive.Settings, :confirm_email
     end
 
+    get "/users/pre-settings", UserSessionController, :passkey_challenge
     post "/users/update-password", UserSessionController, :update_password
   end
 

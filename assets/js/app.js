@@ -25,11 +25,96 @@ import {LiveSocket} from "phoenix_live_view"
 import {hooks as colocatedHooks} from "phoenix-colocated/passkeys"
 import topbar from "../vendor/topbar"
 
+function _arrayBufferToString(buffer) {
+  var binary = '';
+  var bytes = new Uint8Array(buffer);
+  var len = bytes.byteLength;
+  for (var i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[ i ]);
+  }
+  return binary;
+}
+
+function _arrayBufferToBase64(buffer) {
+  var binary = '';
+  var bytes = new Uint8Array(buffer);
+  var len = bytes.byteLength;
+  for (var i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[ i ]);
+  }
+  return window.btoa( binary );
+}
+
+function _base64ToArrayBuffer(base64) {
+  var binary_string =  window.atob(base64);
+  var len = binary_string.length;
+  var bytes = new Uint8Array(len);
+  for (var i = 0; i < len; i++)        {
+      bytes[i] = binary_string.charCodeAt(i);
+  }
+  return bytes.buffer;
+}
+
+function _stringToArrayBuffer(str) {
+  const encoder = new TextEncoder();
+  const bytes = encoder.encode(str);
+  return bytes.buffer;
+}
+
+let Hooks = {}
+Hooks.register_passkey = {
+  mounted() {
+    this.handleEvent("trigger-attestation", ({rp_id, rp_name, challenge, attestation, user_id, user_email}) => {
+      const params = {
+        publicKey: {
+          challenge: _base64ToArrayBuffer(challenge),
+          rp: {
+            id: rp_id,
+            name: rp_name
+          },
+          user: {
+            id: _stringToArrayBuffer(user_id),
+            name: user_email,
+            displayName: user_email
+          },
+          pubKeyCredParams: [
+            {
+              type: "public-key", alg: -7 // "ES256" IANA COSE Algorithms registry
+            }
+          ],
+        attestation: attestation,
+          authenticatorSelection: {
+            residentKey: 'preferred'
+          }
+        }
+      }
+
+      const paramsString = JSON.stringify(params);
+      console.log(`credentials.create ${paramsString}`);
+
+      const that = this;
+      navigator.credentials.create(params)
+        .then(function (newCredential) {
+          that.pushEvent("credential_created", {
+            raw_id: _arrayBufferToBase64(newCredential.rawId),
+            type: newCredential.type,
+            client_data_json: JSON.stringify(newCredential.response.clientDataJSON),
+            attestation_object: _arrayBufferToBase64(newCredential.response.attestationObject)
+          });
+        })
+        .catch(function (err) {
+          console.error(err);
+          that.pushEvent("credential_failed", {error: err.message});
+        });
+    });
+  }
+};
+
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: {_csrf_token: csrfToken},
-  hooks: {...colocatedHooks},
+  hooks: Hooks //, ...colocatedHooks},
 })
 
 // Show progress bar on live navigation and form submits

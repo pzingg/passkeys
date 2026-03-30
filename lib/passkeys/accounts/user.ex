@@ -11,6 +11,8 @@ defmodule Passkeys.Accounts.User do
     field :confirmed_at, :utc_datetime
     field :authenticated_at, :utc_datetime, virtual: true
 
+    has_many :credentials, Passkeys.Accounts.UserCredential
+
     timestamps(type: :utc_datetime)
   end
 

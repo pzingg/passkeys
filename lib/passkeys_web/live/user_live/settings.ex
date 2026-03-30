@@ -65,6 +65,15 @@ defmodule PasskeysWeb.UserLive.Settings do
           Save Password
         </.button>
       </.form>
+
+      <div class="divider" />
+
+      <h2 class="text-lg font-semibold leading-8">Credentials</h2>
+      <.table id="credentials" rows={@credentials}>
+        <:col :let={cred} label="Credential id">{inspect(cred.id)}</:col>
+        <:col :let={cred} label="Public key">{inspect(cred.cose_key)}</:col>
+        <:col :let={cred} label="Authenticator">{inspect(cred.aaguid)}</:col>
+      </.table>
     </Layouts.app>
     """
   end
@@ -87,6 +96,7 @@ defmodule PasskeysWeb.UserLive.Settings do
     user = socket.assigns.current_scope.user
     email_changeset = Accounts.change_user_email(user, %{}, validate_unique: false)
     password_changeset = Accounts.change_user_password(user, %{}, hash_password: false)
+    credentials = Accounts.list_user_credentials(user)
 
     socket =
       socket
@@ -94,6 +104,7 @@ defmodule PasskeysWeb.UserLive.Settings do
       |> assign(:email_form, to_form(email_changeset))
       |> assign(:password_form, to_form(password_changeset))
       |> assign(:trigger_submit, false)
+      |> assign(:credentials, credentials)
 
     {:ok, socket}
   end

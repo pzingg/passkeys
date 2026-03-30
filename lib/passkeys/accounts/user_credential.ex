@@ -11,7 +11,8 @@ defmodule Passkeys.Accounts.UserCredential do
   @foreign_key_type :binary_id
   schema "users_credentials" do
     # DER Subject Public Key Info: https://datatracker.ietf.org/doc/html/rfc5280#section-4.1.2.7
-    field :public_key_spki, :binary
+    field :cose_key, :map
+    field :aaguid, :binary
     field :resident?, :boolean
     field :sign_count, :integer
 
@@ -22,6 +23,6 @@ defmodule Passkeys.Accounts.UserCredential do
 
   def changeset(credential, attrs) do
     credential
-    |> cast(attrs, [:id, :public_key_spki, :resident?, :sign_count, :user_id])
+    |> cast(attrs, [:id, :cose_key, :aaguid, :resident?, :sign_count, :user_id])
   end
 end

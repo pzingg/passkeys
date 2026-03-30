@@ -4,9 +4,11 @@ defmodule Passkeys.Accounts do
   """
 
   import Ecto.Query, warn: false
-  alias Passkeys.Repo
 
-  alias Passkeys.Accounts.{User, UserToken, UserNotifier}
+  require Logger
+
+  alias Passkeys.Repo
+  alias Passkeys.Accounts.{User, UserCredential, UserToken, UserNotifier}
 
   ## Database getters
 
@@ -293,5 +295,57 @@ defmodule Passkeys.Accounts do
         {:ok, {user, tokens_to_expire}}
       end
     end)
+  end
+
+  ## User credentials
+
+  def register_credential(
+        %User{id: user_id},
+        attestation_object_b64,
+        client_data_json,
+        raw_id_b64,
+        challenge
+      ) do
+    attestation_object = Base.decode64!(attestation_object_b64)
+
+    case Wax.register(attestation_object, client_data_json, challenge) do
+      {:ok, {authenticator_data, result}} ->
+        Logger.debug(
+          "Wax: attestation object validated with result #{inspect(result)} " <>
+            " and authenticator data #{inspect(authenticator_data)}"
+        )
+
+        # credential id is not already in use as per bullet point 18 here:
+        # https://www.w3.org/TR/2019/PR-webauthn-20190117/#registering-a-new-credential
+
+        attrs = %{
+          id: raw_id_b64,
+          cose_key: authenticator_data.attested_credential_data.credential_public_key,
+          aaguid: Wax.AuthenticatorData.get_aaguid(authenticator_data)
+        }
+
+        %UserCredential{user_id: user_id}
+        |> change_user_credential(attrs)
+        |> Repo.insert()
+
+      {:error, _} = error ->
+        error
+    end
+  end
+
+  @doc """
+  List WebAuthn credentials for a user
+  """
+  def list_user_credentials(%User{id: user_id}) do
+    UserCredential
+    |> where([c], c.user_id == ^user_id)
+    |> Repo.all()
+  end
+
+  @doc """
+  Returns an `%Ecto.Changeset{}` for inserting a user credential.
+  """
+  def change_user_credential(credential, attrs \\ %{}) do
+    UserCredential.changeset(credential, attrs)
   end
 end

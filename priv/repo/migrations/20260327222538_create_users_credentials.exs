@@ -4,7 +4,8 @@ defmodule Passkeys.Repo.Migrations.CreateUsersCredentials do
   def change do
     create table(:users_credentials, primary_key: false) do
       add :id, :binary, primary_key: true
-      add :public_key_spki, :binary, null: false
+      add :cose_key, :jsonb, null: false
+      add :aaguid, :binary
       add :resident?, :boolean, null: false, default: false
       add :sign_count, :integer, null: false, default: 0
 

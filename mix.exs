@@ -67,7 +67,8 @@ defmodule Passkeys.MixProject do
       {:dns_cluster, "~> 0.2.0"},
       {:bandit, "~> 1.5"},
       {:x509, "~> 0.9"},
-      {:wax_, "~> 0.6"}    ]
+      {:wax_, "~> 0.6"}
+    ]
   end
 
   # Aliases are shortcuts or tasks specific to the current project.

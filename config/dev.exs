@@ -88,3 +88,14 @@ config :phoenix_live_view,
 
 # Disable swoosh api client as it is only required for production adapters.
 config :swoosh, :api_client, false
+
+# Wax configuration
+# For testing with dev server:
+# ngrok http 4000
+# RP_ORIGIN=https://8baa-2601-645-d81-dd60-5613-79ff-fe93-6d2d.ngrok-free.app mix phx.server
+config :wax_,
+  origin: System.get_env("RP_ORIGIN", "http://localhost:4000"),
+  rp_id: :auto,
+  update_metadata: true,
+  allowed_attestation_types: [:basic, :uncertain, :attca, :self],
+  metadata_dir: "priv/fido2_metadata/"

@@ -62,6 +62,71 @@ defmodule Passkeys.Accounts do
   """
   def get_user!(id), do: Repo.get!(User, id)
 
+  @doc """
+  Gets a single user. Returns {:ok, user} or error tuple.
+  It's probably a better practice to create an additional
+  unique random `handle` string in the `User` schema, and
+  use that rather than exposing the primary key...
+  """
+  def get_user_by_handle(handle) do
+    try do
+      query =
+        User
+        |> where([u], u.id == ^handle)
+        |> preload([u], :credentials)
+
+      case Repo.one(query) do
+        %User{} = user -> {:ok, user}
+        _ -> {:error, :user_not_found}
+      end
+    rescue
+      _ ->
+        if is_nil(handle) || handle == "" do
+          {:error, :no_user_handle}
+        else
+          {:error, :invalid_user_handle}
+        end
+    end
+  end
+
+  @doc """
+  Gets a single user. Returns {:ok, user} or error tuple.
+  """
+  def get_user_by_credential_id(credential_id) do
+    try do
+      query =
+        User
+        |> join(:left, [u], c in assoc(u, :credentials))
+        |> where([u, c], c.id == ^credential_id)
+        |> preload([u], :credentials)
+
+      case Repo.one(query) do
+        %User{} = user -> {:ok, user}
+        _ -> {:error, :user_not_found}
+      end
+    rescue
+      _ ->
+        if is_nil(credential_id) || credential_id == "" do
+          {:error, :no_credential_id}
+        else
+          {:error, :invalid_credential_id}
+        end
+    end
+  end
+
+  @doc """
+  Gets a single user. Returns {:ok, user} or error tuple
+  """
+  def get_user_by_handle_or_credential(handle, credential_id) do
+    case get_user_by_handle(handle) do
+      {:ok, user} ->
+        {:ok, user}
+
+      _error ->
+        get_user_by_credential_id(credential_id)
+    end
+  end
+
   ## User registration
 
   @doc """
@@ -223,16 +288,31 @@ defmodule Passkeys.Accounts do
   def login_user_by_magic_link(token) do
     {:ok, query} = UserToken.verify_magic_link_token_query(token)
 
+    unconfirmed_with_password_message = """
+    magic link log in is not allowed for unconfirmed users with a password set!
+
+    This cannot happen with the default implementation, which indicates that you
+    might have adapted the code to a different use case. Please make sure to read the
+    "Mixing magic link and password registration" section of `mix help phx.gen.auth`.
+    """
+
+    process_token_query(query, unconfirmed_with_password_message)
+  end
+
+  def login_user_by_passkey(token, signature) do
+    {:ok, query} = UserToken.verify_passkey_token_query(token, signature)
+
+    unconfirmed_with_password_message =
+      "passkey log in is not allowed for unconfirmed users with a password set!"
+
+    process_token_query(query, unconfirmed_with_password_message)
+  end
+
+  defp process_token_query(query, exception_message) do
     case Repo.one(query) do
       # Prevent session fixation attacks by disallowing magic links for unconfirmed users with password
       {%User{confirmed_at: nil, hashed_password: hash}, _token} when not is_nil(hash) ->
-        raise """
-        magic link log in is not allowed for unconfirmed users with a password set!
-
-        This cannot happen with the default implementation, which indicates that you
-        might have adapted the code to a different use case. Please make sure to read the
-        "Mixing magic link and password registration" section of `mix help phx.gen.auth`.
-        """
+        raise exception_message
 
       {%User{confirmed_at: nil} = user, _token} ->
         user
@@ -275,15 +355,6 @@ defmodule Passkeys.Accounts do
     UserNotifier.deliver_login_instructions(user, magic_link_url_fun.(encoded_token))
   end
 
-  def create_passkey_token(user_id) do
-    {encoded_token, user_token} =
-      get_user!(user_id)
-      |> UserToken.build_email_token("login")
-
-    Repo.insert!(user_token)
-    encoded_token
-  end
-
   @doc """
   Deletes the signed token with the given context.
   """
@@ -309,17 +380,60 @@ defmodule Passkeys.Accounts do
   ## User credentials
 
   @doc """
-  List WebAuthn credentials for a user
+  List WebAuthn credentials for a user.
   """
-  def credentials_for_user_id(nil), do: []
-
-  def credentials_for_user_id(user_id) do
+  def list_user_credentials(%{id: user_id}) when is_binary(user_id) do
     UserCredential
     |> where([c], c.user_id == ^user_id)
     |> Repo.all()
   end
 
-  def register_credential(
+  def list_user_credentials(%{email: email}) when is_binary(email) do
+    UserCredential
+    |> join(:left, [c], u in assoc(c, :user))
+    |> where([c, u], u.email == ^email)
+    |> Repo.all()
+  end
+
+  def list_user_credentials(_), do: []
+
+  @doc """
+  List WebAuthn credentials for a user. Returns `{:ok, credentials}`
+  only if the credential list is non-empty and contains the given credential id.
+  """
+  def list_user_credentials_ok(user_id, credential_id) do
+    case list_user_credentials(%{id: user_id}) do
+      [] ->
+        {:error, :credential_not_found}
+
+      credentials ->
+        case Enum.find(credentials, fn credential -> credential.id == credential_id end) do
+          %UserCredential{} -> {:ok, credentials}
+          _ -> {:error, :credential_not_found}
+        end
+    end
+  end
+
+  @doc """
+  Gets a single user credential, preloading the associated user.
+  Raises `Ecto.NoResultsError` on error.
+  """
+  def get_user_credential!(id) do
+    query =
+      UserCredential
+      |> where([c], c.id == ^id)
+      |> preload([c], :user)
+
+    case Repo.one(query) do
+      %UserCredential{} = credential -> credential
+      _ -> raise Ecto.NoResultsError, queryable: UserCredential, query: query
+    end
+  end
+
+  @doc """
+  Registers and creates a new user credential.
+  """
+  def register_user_credential(
         %User{id: user_id},
         challenge,
         raw_id_b64,
@@ -328,39 +442,104 @@ defmodule Passkeys.Accounts do
       ) do
     attestation_object = Base.decode64!(attestation_object_b64)
 
-    case Wax.register(attestation_object, client_data_json, challenge) do
-      {:ok, {authenticator_data, result}} ->
-        Logger.debug(
-          "Wax: attestation object validated with result #{inspect(result)} " <>
-            " and authenticator data #{inspect(authenticator_data)}"
+    # {:ok, att_data, _} = Wax.Utils.CBOR.decode(attestation_object)
+    # Logger.debug("Wax: attestation object #{inspect(att_data)}")
+    # Logger.debug("Wax: client_data_json #{inspect(client_data_json)}")
+
+    with {:ok, {authenticator_data, result}} <-
+           Wax.register(attestation_object, client_data_json, challenge),
+         _ =
+           Logger.debug(
+             "Wax: attestation object validated with result #{inspect(result)} " <>
+               " and authenticator data #{inspect(authenticator_data)}"
+           ),
+         cose_key =
+           UserCredential.encode_cose_key(
+             authenticator_data.attested_credential_data.credential_public_key
+           ),
+         maybe_aaguid = Wax.AuthenticatorData.get_aaguid(authenticator_data),
+         attrs = %{
+           rp_id: challenge.rp_id,
+           cose_key: cose_key,
+           aaguid: maybe_aaguid
+         },
+         changeset =
+           %UserCredential{id: raw_id_b64, user_id: user_id} |> change_user_credential(attrs),
+         {:ok, credential} <- Repo.insert(changeset) do
+      Phoenix.PubSub.broadcast(
+        Passkeys.PubSub,
+        "credentials",
+        {:credential_created, credential}
+      )
+
+      {:ok, credential}
+    end
+  end
+
+  @doc """
+  Updates a user credential.
+  """
+  def update_user_credential(credential, attrs) do
+    case change_user_credential(credential, attrs) |> Repo.update() do
+      {:ok, credential} ->
+        Phoenix.PubSub.broadcast(
+          Passkeys.PubSub,
+          "credentials",
+          {:credential_updated, credential}
         )
 
-        cose_key =
-          UserCredential.encode_cose_key(
-            authenticator_data.attested_credential_data.credential_public_key
-          )
+        {:ok, credential}
 
-        maybe_aaguid = Wax.AuthenticatorData.get_aaguid(authenticator_data)
-
-        attrs = %{
-          id: raw_id_b64,
-          cose_key: cose_key,
-          aaguid: maybe_aaguid
-        }
-
-        %UserCredential{user_id: user_id}
-        |> change_user_credential(attrs)
-        |> Repo.insert()
-
-      {:error, _} = error ->
+      error ->
         error
     end
   end
 
   @doc """
-  Returns an `%Ecto.Changeset{}` for inserting a user credential.
+  Deletes a user credential.
+  """
+  def delete_user_credential(credential) do
+    case Repo.delete(credential) do
+      {:ok, credential} ->
+        Phoenix.PubSub.broadcast(
+          Passkeys.PubSub,
+          "credentials",
+          {:credential_deleted, credential}
+        )
+
+        {:ok, credential}
+
+      error ->
+        error
+    end
+  end
+
+  @doc """
+  Returns an `%Ecto.Changeset{}` for inserting or updating a user credential.
   """
   def change_user_credential(credential, attrs \\ %{}) do
     UserCredential.changeset(credential, attrs)
+  end
+
+  @doc """
+  Updates the sign count for a validated user_credential, then creates and returns a login token.
+  """
+  def login_by_passkey(user, credential_id, signature, sign_count) do
+    Repo.transact(fn ->
+      with {:ok, _} <-
+             update_user_credential(%UserCredential{id: credential_id}, %{sign_count: sign_count}),
+           {:ok, encoded_token} <- create_passkey_token(user, signature) do
+        {:ok, encoded_token}
+      end
+    end)
+  end
+
+  defp create_passkey_token(user, signature) do
+    {encoded_token, user_token} = UserToken.build_hashed_token(user, "login", signature)
+
+    case Repo.insert(user_token) do
+      {:ok, _} -> {:ok, encoded_token}
+      error -> error
+    end
   end
 end

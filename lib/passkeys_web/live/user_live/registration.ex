@@ -61,7 +61,7 @@ defmodule PasskeysWeb.UserLive.Registration do
         {:ok, _} =
           Accounts.deliver_login_instructions(
             user,
-            &url(~p"/users/log-in/#{&1}")
+            fn token -> url(~p"/users/log-in/#{token}") |> Passkeys.with_wax_origin() end
           )
 
         {:noreply,

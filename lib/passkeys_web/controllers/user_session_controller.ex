@@ -13,26 +13,21 @@ defmodule PasskeysWeb.UserSessionController do
   end
 
   # magic link or passkey login
+  defp create(
+         conn,
+         %{"user" => %{"signature" => signature, "token" => token} = user_params},
+         info
+       ) do
+    Accounts.login_user_by_passkey(token, signature)
+    |> handle_token_result(conn, user_params, info)
+  end
+
   defp create(conn, %{"user" => %{"token" => token} = user_params}, info) do
-    case Accounts.login_user_by_magic_link(token) do
-      {:ok, {user, tokens_to_disconnect}} ->
-        UserAuth.disconnect_sessions(tokens_to_disconnect)
-
-        conn
-        |> put_flash(:info, info)
-        |> UserAuth.log_in_user(user, user_params)
-
-      _ ->
-        conn
-        |> put_flash(:error, "The link is invalid or it has expired.")
-        |> redirect(to: ~p"/users/log-in")
-    end
+    Accounts.login_user_by_magic_link(token) |> handle_token_result(conn, user_params, info)
   end
 
   # email + password login
-  defp create(conn, %{"user" => user_params}, info) do
-    %{"email" => email, "password" => password} = user_params
-
+  defp create(conn, %{"user" => %{"email" => email, "password" => password} = user_params}, info) do
     if user = Accounts.get_user_by_email_and_password(email, password) do
       conn
       |> put_flash(:info, info)
@@ -44,6 +39,20 @@ defmodule PasskeysWeb.UserSessionController do
       |> put_flash(:email, String.slice(email, 0, 160))
       |> redirect(to: ~p"/users/log-in")
     end
+  end
+
+  defp handle_token_result({:ok, {user, tokens_to_disconnect}}, conn, user_params, info) do
+    UserAuth.disconnect_sessions(tokens_to_disconnect)
+
+    conn
+    |> put_flash(:info, info)
+    |> UserAuth.log_in_user(user, user_params)
+  end
+
+  defp handle_token_result(_, conn, _, _) do
+    conn
+    |> put_flash(:error, "The link is invalid or it has expired.")
+    |> redirect(to: ~p"/users/log-in")
   end
 
   def update_password(conn, %{"user" => user_params} = params) do

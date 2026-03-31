@@ -346,6 +346,10 @@ defmodule PasskeysWeb.CoreComponents do
     default: &Function.identity/1,
     doc: "the function for mapping each row before calling the :col and :action slots"
 
+  attr :row_data, :any,
+    default: &Function.identity/1,
+    doc: "the function for mapping each row to its underlying data"
+
   slot :col, required: true do
     attr :label, :string
   end
@@ -373,7 +377,10 @@ defmodule PasskeysWeb.CoreComponents do
           <td
             :for={col <- @col}
             phx-click={@row_click && @row_click.(row)}
-            class={@row_click && "hover:cursor-pointer"}
+            class={[
+              Map.get(@row_data.(row), String.to_atom(col.label), %{}) |> Map.get(:td_class),
+              @row_click && "hover:cursor-pointer"
+            ]}
           >
             {render_slot(col, @row_item.(row))}
           </td>

@@ -8,6 +8,7 @@ defmodule Passkeys.Accounts.UserToken do
 
   # It is very important to keep the magic link token expiry short,
   # since someone with access to the email may take over the account.
+  @passkey_link_validity_in_seconds 10
   @magic_link_validity_in_minutes 15
   @change_email_validity_in_days 7
   @session_validity_in_days 14
@@ -70,13 +71,6 @@ defmodule Passkeys.Accounts.UserToken do
   @doc """
   Builds a token and its hash to be delivered to the user's email.
 
-  The non-hashed token is sent to the user email while the
-  hashed part is stored in the database. The original token cannot be reconstructed,
-  which means anyone with read-only access to the database cannot directly use
-  the token in the application to gain access. Furthermore, if the user changes
-  their email in the system, the tokens sent to the previous email are no longer
-  valid.
-
   Users can easily adapt the existing code to provide other types of delivery methods,
   for example, by phone numbers.
   """
@@ -84,7 +78,18 @@ defmodule Passkeys.Accounts.UserToken do
     build_hashed_token(user, context, user.email)
   end
 
-  defp build_hashed_token(user, context, sent_to) do
+  @doc """
+  Builds a token and its hash.
+
+  The non-hashed, Base64-encode token can be sent to the user's email or used as
+  the "token" path parameter POSTed to `UserSessionController.create`, while the
+  hashed part is stored in the database. The original token cannot be reconstructed,
+  which means anyone with read-only access to the database cannot directly use
+  the token in the application to gain access. Furthermore, if the user changes
+  their email in the system, the tokens sent to the previous email are no longer
+  valid.
+  """
+  def build_hashed_token(user, context, sent_to \\ nil) do
     token = :crypto.strong_rand_bytes(@rand_size)
     hashed_token = :crypto.hash(@hash_algorithm, token)
 
@@ -116,6 +121,25 @@ defmodule Passkeys.Accounts.UserToken do
             join: user in assoc(token, :user),
             where: token.inserted_at > ago(^@magic_link_validity_in_minutes, "minute"),
             where: token.sent_to == user.email,
+            select: {user, token}
+
+        {:ok, query}
+
+      :error ->
+        :error
+    end
+  end
+
+  def verify_passkey_token_query(token, signature) do
+    case Base.url_decode64(token, padding: false) do
+      {:ok, decoded_token} ->
+        hashed_token = :crypto.hash(@hash_algorithm, decoded_token)
+
+        query =
+          from token in by_token_and_context_query(hashed_token, "login"),
+            join: user in assoc(token, :user),
+            where: token.inserted_at > ago(^@passkey_link_validity_in_seconds, "second"),
+            where: token.sent_to == ^signature,
             select: {user, token}
 
         {:ok, query}

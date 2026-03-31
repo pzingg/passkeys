@@ -37,17 +37,11 @@ In order to work with the Enpass extension, the server must be hosted on an SSL 
 
  I have used [ngrok free](https://ngrok.com/) to create a tunnel betweent the localhost dev server and an HTTPS url.
 
-The `wax_` configuration must be set to the correct origin in this setup.  The `wax_` configuration specifies `rp_id: :auto` and will parse the passkey RP domain from whatever is specified in its `:origin` configuration. I use the environment variable `RP_ORIGIN` to override the default setting of `origin: http://localhost:4000` (where the Phoenix LiveView dev server normally runs).
+The `wax_` configuration must be set to the correct origin in this setup.  The `wax_` configuration specifies `rp_id: :auto` and will parse the passkey RP domain from whatever is specified in its `:origin` configuration. I use the environment variable `WAX_ORIGIN` to override the default setting of `origin: http://localhost:4000` (where the Phoenix LiveView dev server normally runs).
 
 If you don't set the origin correctly you will get a failure message:
 
 "The relying party ID is not a registrable domain suffix of, nor equal to the current domain. Subsequently, the .well-known/webauthn resource of the claimed RP ID had the wrong content-type. (It should be application/json.)".
-
-### TODO
-
-- Consider moving passkey creation/deletion to a separate page to avoid `sudo_mode` 20 minute timeouts.
-- Use LiveView streams to list passkeys on account settings page (read the best practice in the AGENTS.md file!).
-- Add a Delete button to remove a passkey from the database.
 
 ### Registering a new passkey
 
@@ -108,6 +102,31 @@ And here is the JSON of the the options used by `wax_demo`:
 }
 ```
 
+### Attestation issues
+
+I'm trying to get things working with both Enpass and a USB security key device.
+There are two issues: 
+
+  1. obtaining the aaguid from a hardware security key
+  2. matching the returned attestation value to the requested conveyance
+
+The results from testing passkey credential creation with different values for the `:attestation` option:
+
+| Attestation | Enpass | USB Security Key |
+| ----------- | ------ | ---------------- |
+| none (default) | **OK, with aaguid** | OK, no aaguid returned |
+| direct | ERROR verifying format `:none` | **OK, with aaguid** |
+| indirect | ERROR verifying format `:none` | ERROR verifying format `:packed` |
+
+The ERROR is a `Wax.AttestationVerificationError` with reason `:invalid_attestation_conveyance_preference`.
+
+Until this is solved, I am using two different buttons in the UI to specify the
+attestation value used when creating passkeys.
+
+### Enpass "Update Item" vs "Save as New"
+
+For Enpass, and maybe other authenticators, passkey credentials are stored inside named "items", that can be edited within Enpass and can contain additional data. When you create a new credential, the password manager gives you the option of adding the new credential to an existing item that contains a passkey with the same rp_id, or saving the new credential in a new item. Either way, the credential id returned to the Elixir application is new.
+
 ### Removing a passkey
 
 (TODO) We can add a Remove button on the account settings page to delete the associated `UserCredential` record, but as far as I know there is no method in the `CredentialsContainer` interface that will allow removing the credential from Enpass (or a Yubikey). You can also delete the entire item in the Enpass application (thereby destroying the passkey), but I don't find a way to remove a passkey from an Enpass item leaving the other information intact (username and password for example).
@@ -150,6 +169,7 @@ Using data from the passkey-authenticator-aaguids repository, I have added the f
 - bitwarden.json
 - dashlane.json
 - enpass.json
+- thetis_pro.json
 
 Also included by copying from the `wax_demo` repository:
 

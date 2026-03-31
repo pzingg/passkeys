@@ -51,15 +51,13 @@ defmodule PasskeysWeb.UserLive.Login do
             readonly={!!@current_scope}
             field={f[:email]}
             type="email"
-            label="Email"
+            label="Email (not required for hardware keys)"
             autocomplete="username"
             spellcheck="false"
-            required
             phx-mounted={JS.focus()}
           />
-          <input type="hidden" name="user[authenticator]" value={@passkey_authenticator} />
+          <input type="hidden" name="user[signature]" value={@passkey_signature} />
           <input type="hidden" name="user[token]" value={@passkey_token} />
-          <input type="hidden" name="user[sign_count]" value={@passkey_sign_count} />
           <.button class="btn btn-primary w-full">
             Log in with passkey <span aria-hidden="true">→</span>
           </.button>
@@ -140,9 +138,8 @@ defmodule PasskeysWeb.UserLive.Login do
         form: form,
         trigger_password_submit: false,
         trigger_passkey_submit: false,
-        passkey_authenticator: "",
+        passkey_signature: "",
         passkey_token: "",
-        passkey_sign_count: 0,
         webauthn_challenge: nil
       )
 
@@ -158,7 +155,7 @@ defmodule PasskeysWeb.UserLive.Login do
     if user = Accounts.get_user_by_email(email) do
       Accounts.deliver_login_instructions(
         user,
-        &url(~p"/users/log-in/#{&1}")
+        fn token -> url(~p"/users/log-in/#{token}") |> Passkeys.with_wax_origin() end
       )
     end
 
@@ -171,15 +168,15 @@ defmodule PasskeysWeb.UserLive.Login do
      |> push_navigate(to: ~p"/users/log-in")}
   end
 
-  def handle_event("submit_passkey", %{"user" => %{"email" => email}}, socket) do
-    user = Accounts.get_user_by_email(email)
-    credentials = Accounts.credentials_for_user_id(user.id)
+  def handle_event("submit_passkey", %{"user" => user_params}, socket) do
+    email = Map.get(user_params, "email", "")
+    credentials = Accounts.list_user_credentials(%{email: email})
 
     opts =
       if Enum.empty?(credentials) do
         []
       else
-        [allow_credentials: Enum.map(credentials, &UserCredential.wax_credential/1)]
+        [allow_credentials: Enum.map(credentials, &UserCredential.public_key_tuple/1)]
       end
 
     challenge = Wax.new_authentication_challenge(opts)
@@ -196,13 +193,6 @@ defmodule PasskeysWeb.UserLive.Login do
     {:noreply, socket}
   end
 
-  def handle_event("credential_selected", %{"user_handle" => nil}, socket) do
-    Logger.error("credential selected - no handle")
-
-    socket = put_flash(socket, :error, "Passkey registration failed: no user")
-    {:noreply, socket}
-  end
-
   def handle_event(
         "credential_selected",
         %{
@@ -211,46 +201,59 @@ defmodule PasskeysWeb.UserLive.Login do
           "client_data_json" => client_data_json,
           "authenticator_data" => authenticator_data_b64,
           "signature" => signature_b64,
-          "user_handle" => maybe_user_id
+          "user_handle" => user_handle
         },
         socket
       ) do
     authenticator_data_raw = Base.decode64!(authenticator_data_b64)
     signature_raw = Base.decode64!(signature_b64)
-
     challenge = socket.assigns.webauthn_challenge
-    credentials = Accounts.credentials_for_user_id(maybe_user_id)
-    credentials_from_user_id = Enum.map(credentials, &UserCredential.wax_credential/1)
-    cred_id_aaguid_mapping = Enum.map(credentials, &UserCredential.cred_mapping/1) |> Map.new()
 
+    # Notes:
+    #
+    # `Accounts.get_user_by_handle` checks for missing or invalid formats for
+    # `user_handle` (which must be a UUID string) as well as if the user exists
+    # in the database. It's probably a better practice to create an additional
+    # unique random `handle` string in the `User` schema, and use that rather
+    # than exposing the primary key...
+    #
+    # The public keys that will be checked in `Wax.authenticate` are either from
+    # `challenge.allow_credentials`, or if a resident key was used, the
+    # list of tuples stored in our database for the credentials registered to the user.
     socket =
-      with {:ok, authenticator_data} <-
+      with {:ok, user} <- Accounts.get_user_by_handle_or_credential(user_handle, credential_id),
+           aaguids = Enum.map(user.credentials, &UserCredential.aaguid_tuple/1) |> Map.new(),
+           {:ok, _name} <-
+             check_authenticator_status(credential_id, aaguids, challenge),
+           public_keys = Enum.map(user.credentials, &UserCredential.public_key_tuple/1),
+           {:ok, authenticator_data} <-
              Wax.authenticate(
                credential_id,
                authenticator_data_raw,
                signature_raw,
                client_data_json,
                challenge,
-               credentials_from_user_id
+               public_keys
              ),
-           {:ok, name} <-
-             check_authenticator_status(credential_id, cred_id_aaguid_mapping, challenge) do
-        Logger.debug("Wax: successful authentication for challenge #{inspect(challenge)}")
-
-        encoded_token = Accounts.create_passkey_token(maybe_user_id)
-
+           _ = Logger.debug("Wax: successful authentication for challenge #{inspect(challenge)}"),
+           {:ok, encoded_token} <-
+             Accounts.login_by_passkey(
+               user,
+               credential_id,
+               signature_b64,
+               authenticator_data.sign_count
+             ) do
         assign(socket,
-          passkey_authenticator: name,
+          passkey_signature: signature_b64,
           passkey_token: encoded_token,
-          passkey_sign_count: authenticator_data.sign_count,
           trigger_passkey_submit: true
         )
       else
         {:error, %Ecto.Changeset{} = changeset} ->
-          put_flash(socket, :error, "Passkey registration failed: #{inspect(changeset.errors)}")
+          put_flash(socket, :error, "Passkey authentication failed: #{inspect(changeset.errors)}")
 
         {:error, reason} ->
-          put_flash(socket, :error, "Passkey registration failed: #{inspect(reason)}")
+          put_flash(socket, :error, "Passkey authentication failed: #{inspect(reason)}")
       end
 
     {:noreply, socket}
@@ -267,8 +270,8 @@ defmodule PasskeysWeb.UserLive.Login do
     Application.get_env(:passkeys, Passkeys.Mailer)[:adapter] == Swoosh.Adapters.Local
   end
 
-  defp check_authenticator_status(credential_id, cred_id_aaguid_mapping, challenge) do
-    case Map.get(cred_id_aaguid_mapping, credential_id) do
+  defp check_authenticator_status(credential_id, aaguids, challenge) do
+    case Map.get(aaguids, credential_id) do
       nil ->
         {:ok, "a credential not in database"}
 

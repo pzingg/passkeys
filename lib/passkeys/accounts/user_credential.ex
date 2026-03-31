@@ -11,7 +11,7 @@ defmodule Passkeys.Accounts.UserCredential do
   @derive {Phoenix.Param, key: :id}
   @foreign_key_type :binary_id
   schema "users_credentials" do
-    # DER Subject Public Key Info: https://datatracker.ietf.org/doc/html/rfc5280#section-4.1.2.7
+    field :rp_id, :string
     field :cose_key, :map
     field :aaguid, :binary
     field :resident?, :boolean
@@ -24,14 +24,14 @@ defmodule Passkeys.Accounts.UserCredential do
 
   def changeset(credential, attrs) do
     credential
-    |> cast(attrs, [:id, :cose_key, :aaguid, :resident?, :sign_count, :user_id])
+    |> cast(attrs, [:rp_id, :cose_key, :aaguid, :resident?, :sign_count])
   end
 
-  def wax_credential(credential) do
+  def public_key_tuple(credential) do
     {credential.id, decode_cose_key(credential.cose_key)}
   end
 
-  def cred_mapping(credential) do
+  def aaguid_tuple(credential) do
     {credential.id, credential.aaguid}
   end
 

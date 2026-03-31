@@ -90,11 +90,14 @@ config :phoenix_live_view,
 config :swoosh, :api_client, false
 
 # Wax configuration
+#
+# Using attestation: "direct" to get aaguid from hardware keys
+#
 # For testing with dev server:
 # ngrok http 4000
-# RP_ORIGIN=https://8baa-2601-645-d81-dd60-5613-79ff-fe93-6d2d.ngrok-free.app mix phx.server
+# WAX_ORIGIN=https://8baa-2601-645-d81-dd60-5613-79ff-fe93-6d2d.ngrok-free.app mix phx.server
 config :wax_,
-  origin: System.get_env("RP_ORIGIN", "http://localhost:4000"),
+  origin: System.get_env("WAX_ORIGIN", "http://localhost:4000"),
   rp_id: :auto,
   timeout: 300,
   update_metadata: true,

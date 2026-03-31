@@ -66,6 +66,7 @@ defmodule Passkeys.MixProject do
       {:jason, "~> 1.2"},
       {:dns_cluster, "~> 0.2.0"},
       {:bandit, "~> 1.5"},
+      {:tz, "~> 0.26"},
       {:x509, "~> 0.9"},
       {:wax_, "~> 0.6"}
     ]

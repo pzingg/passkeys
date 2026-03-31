@@ -1,0 +1,20 @@
+{
+  "aaguid": "a3975549-b191-fd67-b8fb-017e2917fdb3",
+  "protocolFamily": "u2f",
+  "schema": 3,
+  "attestation_types": [
+    "basic_full"
+  ],
+  "keyProtection": [
+      "hardware",
+      "secure_element"
+  ],
+  "attachmentHint": [
+      "external",
+      "wired",
+      "nfc",
+      "wireless"
+  ],
+  "description": "Thetis Pro",
+  "icon": "data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4KPHN2ZyB2ZXJzaW9uPSIxLjEiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgd2lkdGg9IjEwMCIgaGVpZ2h0PSI5MCI+CjxwYXRoIGQ9Ik0wLDAgTDEwMCwwIEwxMDAsOTAgTDAsOTAgWiAiIGZpbGw9IiNGREZFRkUiIHRyYW5zZm9ybT0idHJhbnNsYXRlKDAsMCkiLz4KPHBhdGggZD0iTTAsMCBMNCwyIEwxNSwxNCBMMjEsMjIgTDI5LDM1IEwzMSwzOSBMMzEsNTUgTDI2LDY0IEwyMCw3MSBMMTMsNzUgTDQsNzcgTC04LDc2IEwtMTksNzAgTC0yNyw2MCBMLTI5LDU0IEwtMjksNDEgTC0yNSwzMSBMLTE3LDE5IEwtNCw0IFogIiBmaWxsPSIjNDNCNERFIiB0cmFuc2Zvcm09InRyYW5zbGF0ZSg0OSw3KSIvPgo8cGF0aCBkPSJNMCwwIEw0LDIgTDgsNyBMMTMsMTIgTDE5LDIyIEwyMCwyNCBMMjAsMzIgTDE2LDQwIEwxMSw0NCBMNSw0NyBMLTMsNDcgTC0xMSw0MyBMLTE1LDM5IEwtMTcsMzQgTC0xNywyMiBMLTEwLDExIFogTTAsOCBMLTcsMTUgTC0xMywyNSBMLTEzLDMzIEwtOCw0MSBMLTQsNDMgTDUsNDMgTDExLDQwIEwxNSwzMyBMMTUsMjYgTDExLDE4IEwyLDggWiAiIGZpbGw9IiNFN0Y2RjgiIHRyYW5zZm9ybT0idHJhbnNsYXRlKDQ5LDMyKSIvPgo8L3N2Zz4K"
+}

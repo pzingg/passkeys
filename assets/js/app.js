@@ -64,7 +64,7 @@ function _stringToArrayBuffer(str) {
 let Hooks = {}
 Hooks.register_passkey = {
   mounted() {
-    this.handleEvent("trigger-attestation", ({rp_id, rp_name, challenge, attestation, user_id, user_email}) => {
+    this.handleEvent("trigger-attestation", ({rp_id, rp_name, challenge, attestation, user_handle, user_email}) => {
       const params = {
         publicKey: {
           challenge: _base64ToArrayBuffer(challenge),
@@ -73,7 +73,7 @@ Hooks.register_passkey = {
             name: rp_name
           },
           user: {
-            id: _stringToArrayBuffer(user_id),
+            id: _stringToArrayBuffer(user_handle),
             name: user_email,
             displayName: user_email
           },
@@ -126,14 +126,14 @@ Hooks.authenticate_passkey = {
           challenge: _base64ToArrayBuffer(challenge),
           allowCredentials: allowCredentials,
         }
-      }).then(function (newCredential) {
+      }).then(function (credential) {
         that.pushEvent("credential_selected", {
-            type: newCredential.type,
-            raw_id: _arrayBufferToBase64(newCredential.rawId),
-            client_data_json: _arrayBufferToString(newCredential.response.clientDataJSON),
-            authenticator_data: _arrayBufferToBase64(newCredential.response.authenticatorData),
-            signature: _arrayBufferToBase64(newCredential.response.signature),
-            user_handle: _arrayBufferToString(newCredential.response.userHandle)
+            type: credential.type,
+            raw_id: _arrayBufferToBase64(credential.rawId),
+            client_data_json: _arrayBufferToString(credential.response.clientDataJSON),
+            authenticator_data: _arrayBufferToBase64(credential.response.authenticatorData),
+            signature: _arrayBufferToBase64(credential.response.signature),
+            user_handle: _arrayBufferToString(credential.response.userHandle)
           });
         })
         .catch(function (err) {

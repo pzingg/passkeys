@@ -26,44 +26,54 @@ import {hooks as colocatedHooks} from "phoenix-colocated/passkeys"
 import topbar from "../vendor/topbar"
 
 function _arrayBufferToString(buffer) {
-  var binary = '';
-  var bytes = new Uint8Array(buffer);
-  var len = bytes.byteLength;
+  var binary = ""
+  var bytes = new Uint8Array(buffer)
+  var len = bytes.byteLength
   for (var i = 0; i < len; i++) {
-    binary += String.fromCharCode(bytes[ i ]);
+    binary += String.fromCharCode(bytes[ i ])
   }
-  return binary;
+  return binary
 }
 
 function _arrayBufferToBase64(buffer) {
-  var binary = '';
-  var bytes = new Uint8Array(buffer);
-  var len = bytes.byteLength;
+  var binary = ""
+  var bytes = new Uint8Array(buffer)
+  var len = bytes.byteLength
   for (var i = 0; i < len; i++) {
-    binary += String.fromCharCode(bytes[ i ]);
+    binary += String.fromCharCode(bytes[ i ])
   }
-  return window.btoa( binary );
+  return window.btoa( binary )
 }
 
 function _base64ToArrayBuffer(base64) {
-  var binary_string =  window.atob(base64);
-  var len = binary_string.length;
-  var bytes = new Uint8Array(len);
+  var binary_string =  window.atob(base64)
+  var len = binary_string.length
+  var bytes = new Uint8Array(len)
   for (var i = 0; i < len; i++)        {
-      bytes[i] = binary_string.charCodeAt(i);
+      bytes[i] = binary_string.charCodeAt(i)
   }
-  return bytes.buffer;
+  return bytes.buffer
 }
 
 function _stringToArrayBuffer(str) {
-  const encoder = new TextEncoder();
-  const bytes = encoder.encode(str);
-  return bytes.buffer;
+  const encoder = new TextEncoder()
+  const bytes = encoder.encode(str)
+  return bytes.buffer
 }
 
 let Hooks = {}
 Hooks.register_passkey = {
   mounted() {
+    this.handleEvent("get-client-capabilities", async () => {
+      if (PublicKeyCredential.getClientCapabilities) {
+        const capabilities = await PublicKeyCredential.getClientCapabilities()
+        for (const [key, value] of Object.entries(capabilities)) {
+          console.log(` ${key}: ${value}`)
+        }
+      } else {
+        console.log("getClientCapabilities not defined")
+      }
+    })
     this.handleEvent("trigger-attestation", ({rp_id, rp_name, challenge, attestation, user_handle, user_email}) => {
       const params = {
         publicKey: {
@@ -78,71 +88,95 @@ Hooks.register_passkey = {
             displayName: user_email
           },
           pubKeyCredParams: [
-            {
-              type: "public-key", alg: -7 // "ES256" IANA COSE Algorithms registry
-            }
+            { type: "public-key", alg: -8}, // "EdDSA" IANA COSE Algorithms registry
+            { type: "public-key", alg: -7}, // "ES256" IANA COSE Algorithms registry
+            { type: "public-key", alg: -257} // "RS256" IANA COSE Algorithms registry
           ],
-        attestation: attestation,
+          extensions: {
+            credProps: true
+          },
+          attestation: attestation,
           authenticatorSelection: {
-            residentKey: 'preferred'
+            residentKey: "required",
+            requireResidentKey: true,
           }
         }
       }
 
-      const paramsString = JSON.stringify(params);
-      console.log(`credentials.create ${paramsString}`);
+      const paramsString = JSON.stringify(params)
+      console.log(`credentials.create ${paramsString}`)
 
-      const that = this;
+      const that = this
       navigator.credentials.create(params)
-        .then(function (newCredential) {
-          that.pushEvent("credential_created", {
-            type: newCredential.type,
-            raw_id: _arrayBufferToBase64(newCredential.rawId),
-            client_data_json: _arrayBufferToString(newCredential.response.clientDataJSON),
-            attestation_object: _arrayBufferToBase64(newCredential.response.attestationObject)
-          });
+        .then(function (credential) {
+          if (credential) {
+            that.pushEvent("credential_created", {
+              type: credential.type,
+              raw_id: _arrayBufferToBase64(credential.rawId),
+              client_data_json: _arrayBufferToString(credential.response.clientDataJSON),
+              attestation_object: _arrayBufferToBase64(credential.response.attestationObject),
+              attachment: credential.authenticatorAttachment,
+              transports: credential.response.getTransports(),
+              resident_key: isResidentKey(credential)
+            })
+          } else {
+            console.error("credentials.create returned null")
+            that.pushEvent("credentials_create_failed", {error: "Unable to create credential"})
+          }
         })
         .catch(function (err) {
-          console.error(err);
-          that.pushEvent("credentials_create_failed", {error: err.message});
-        });
-    });
+          console.error(err)
+          that.pushEvent("credentials_create_failed", {error: err.message})
+        })
+    })
   }
-};
+}
+
+// Apparently Safari does not support the credProps extension, so
+// this will probably return undefined on Safari.
+const isResidentKey = (credential) => {
+  const extension = credential.getClientExtensionResults()
+  return extension?.credProps?.rk
+}
 
 Hooks.authenticate_passkey = {
   mounted() {
     this.handleEvent("trigger-authentication", ({challenge, cred_ids}) => {
       const allowCredentials = cred_ids.map((cred_id) => {
-        return {id: _base64ToArrayBuffer(cred_id), type: "public-key"};
-      });
+        return {id: _base64ToArrayBuffer(cred_id), type: "public-key"}
+      })
 
       // userHandle is an ArrayBuffer containing an opaque user identifier, specified as user.id
       // in the options passed to the originating navigator.credentials.create() call.
 
-      const that = this;
+      const that = this
       navigator.credentials.get({
         publicKey: {
           challenge: _base64ToArrayBuffer(challenge),
           allowCredentials: allowCredentials,
         }
       }).then(function (credential) {
-        that.pushEvent("credential_selected", {
-            type: credential.type,
-            raw_id: _arrayBufferToBase64(credential.rawId),
-            client_data_json: _arrayBufferToString(credential.response.clientDataJSON),
-            authenticator_data: _arrayBufferToBase64(credential.response.authenticatorData),
-            signature: _arrayBufferToBase64(credential.response.signature),
-            user_handle: _arrayBufferToString(credential.response.userHandle)
-          });
-        })
-        .catch(function (err) {
-          console.error(err);
-          that.pushEvent("credentials_get_failed", {error: err.message});
-        });
-    });
+        if (credential) {
+          that.pushEvent("credential_selected", {
+              type: credential.type,
+              raw_id: _arrayBufferToBase64(credential.rawId),
+              client_data_json: _arrayBufferToString(credential.response.clientDataJSON),
+              authenticator_data: _arrayBufferToBase64(credential.response.authenticatorData),
+              signature: _arrayBufferToBase64(credential.response.signature),
+              user_handle: _arrayBufferToString(credential.response.userHandle)
+            })
+        } else {
+          console.error("credentials.get returned null")
+          that.pushEvent("credentials_get_failed", {error: "Unable to select an unambiguous passkey"})
+        }
+      })
+      .catch(function (err) {
+        console.error(err)
+        that.pushEvent("credentials_get_failed", {error: err.message})
+      })
+    })
   }
-};
+}
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {

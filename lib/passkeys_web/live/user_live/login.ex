@@ -28,98 +28,102 @@ defmodule PasskeysWeb.UserLive.Login do
           </.header>
         </div>
 
-        <div :if={local_mail_adapter?()} class="alert alert-info">
-          <.icon name="hero-information-circle" class="size-6 shrink-0" />
-          <div>
-            <p>You are running the local mail adapter.</p>
-            <p>
-              To see sent emails, visit <.link href="/dev/mailbox" class="underline">the mailbox page</.link>.
-            </p>
-          </div>
+        <ul class="flex justify-between text-sm font-medium text-center text-body border-b border-default">
+          <.tab active={@active_tab} value="passkey">Log in with passkey</.tab>
+          <.tab active={@active_tab} value="magic_link">Magic link</.tab>
+          <.tab active={@active_tab} value="password">Password</.tab>
+        </ul>
+
+        <div :if={@active_tab == "passkey"}>
+          <.form
+            for={@form}
+            id="login_form_passkey"
+            action={~p"/users/log-in"}
+            phx-hook="authenticate_passkey"
+            phx-submit="submit_passkey"
+            phx-trigger-action={@trigger_passkey_submit}
+          >
+            <.input
+              readonly={!!@current_scope}
+              field={@form[:email]}
+              type="email"
+              label="Email (optional: filter matching credentials)"
+              autocomplete="username"
+              spellcheck="false"
+              phx-mounted={JS.focus()}
+            />
+            <input type="hidden" name="user[signature]" value={@passkey_signature} />
+            <input type="hidden" name="user[token]" value={@passkey_token} />
+            <.button class="btn btn-primary w-full">
+              Log in with passkey <span aria-hidden="true">→</span>
+            </.button>
+          </.form>
         </div>
 
-        <.form
-          :let={f}
-          for={@form}
-          id="login_form_passkey"
-          action={~p"/users/log-in"}
-          phx-hook="authenticate_passkey"
-          phx-submit="submit_passkey"
-          phx-trigger-action={@trigger_passkey_submit}
-        >
-          <.input
-            readonly={!!@current_scope}
-            field={f[:email]}
-            type="email"
-            label="Email (not required for hardware keys)"
-            autocomplete="username"
-            spellcheck="false"
-            phx-mounted={JS.focus()}
-          />
-          <input type="hidden" name="user[signature]" value={@passkey_signature} />
-          <input type="hidden" name="user[token]" value={@passkey_token} />
-          <.button class="btn btn-primary w-full">
-            Log in with passkey <span aria-hidden="true">→</span>
-          </.button>
-        </.form>
+        <div :if={@active_tab == "magic_link"}>
+          <div :if={Passkeys.local_mail_adapter?()} class="alert alert-info">
+            <.icon name="hero-information-circle" class="size-6 shrink-0" />
+            <div>
+              <p>You are running the local mail adapter.</p>
+              <p>
+                To see sent emails, visit <.link href="/dev/mailbox" class="underline">the mailbox page</.link>.
+              </p>
+            </div>
+          </div>
 
-        <div class="divider">or</div>
+          <.form
+            for={@form}
+            id="login_form_magic"
+            action={~p"/users/log-in"}
+            phx-submit="submit_magic"
+          >
+            <.input
+              readonly={!!@current_scope}
+              field={@form[:email]}
+              type="email"
+              label="Email"
+              autocomplete="username"
+              spellcheck="false"
+              required
+            />
+            <.button class="btn btn-primary w-full">
+              Log in with email <span aria-hidden="true">→</span>
+            </.button>
+          </.form>
+        </div>
 
-        <.form
-          :let={f}
-          for={@form}
-          id="login_form_magic"
-          action={~p"/users/log-in"}
-          phx-submit="submit_magic"
-        >
-          <.input
-            readonly={!!@current_scope}
-            field={f[:email]}
-            type="email"
-            label="Email"
-            autocomplete="username"
-            spellcheck="false"
-            required
-            phx-mounted={JS.focus()}
-          />
-          <.button class="btn btn-primary w-full">
-            Log in with email <span aria-hidden="true">→</span>
-          </.button>
-        </.form>
-
-        <div class="divider">or</div>
-
-        <.form
-          :let={f}
-          for={@form}
-          id="login_form_password"
-          action={~p"/users/log-in"}
-          phx-submit="submit_password"
-          phx-trigger-action={@trigger_password_submit}
-        >
-          <.input
-            readonly={!!@current_scope}
-            field={f[:email]}
-            type="email"
-            label="Email"
-            autocomplete="username"
-            spellcheck="false"
-            required
-          />
-          <.input
-            field={@form[:password]}
-            type="password"
-            label="Password"
-            autocomplete="current-password"
-            spellcheck="false"
-          />
-          <.button class="btn btn-primary w-full" name={@form[:remember_me].name} value="true">
-            Log in and stay logged in <span aria-hidden="true">→</span>
-          </.button>
-          <.button class="btn btn-primary btn-soft w-full mt-2">
-            Log in only this time
-          </.button>
-        </.form>
+        <div :if={@active_tab == "password"}>
+          <.form
+            for={@form}
+            id="login_form_password"
+            action={~p"/users/log-in"}
+            phx-submit="submit_password"
+            phx-trigger-action={@trigger_password_submit}
+          >
+            <.input
+              readonly={!!@current_scope}
+              field={@form[:email]}
+              type="email"
+              label="Email"
+              autocomplete="username"
+              spellcheck="false"
+              required
+            />
+            <.input
+              field={@form[:password]}
+              type="password"
+              label="Password"
+              autocomplete="current-password"
+              spellcheck="false"
+            />
+            <.button class="btn btn-primary w-full" name={@form[:remember_me].name} value="true">
+              Log in and stay logged in <span aria-hidden="true">→</span>
+            </.button>
+            <.button class="btn btn-primary btn-soft w-full mt-2">
+              Log in only this time
+            </.button>
+          </.form>
+        </div>
       </div>
     </Layouts.app>
     """
@@ -136,6 +140,7 @@ defmodule PasskeysWeb.UserLive.Login do
     socket =
       assign(socket,
         form: form,
+        active_tab: "passkey",
         trigger_password_submit: false,
         trigger_passkey_submit: false,
         passkey_signature: "",
@@ -201,7 +206,7 @@ defmodule PasskeysWeb.UserLive.Login do
           "client_data_json" => client_data_json,
           "authenticator_data" => authenticator_data_b64,
           "signature" => signature_b64,
-          "user_handle" => user_handle
+          "user_handle" => maybe_user_handle
         },
         socket
       ) do
@@ -221,7 +226,8 @@ defmodule PasskeysWeb.UserLive.Login do
     # `challenge.allow_credentials`, or if a resident key was used, the
     # list of tuples stored in our database for the credentials registered to the user.
     socket =
-      with {:ok, user} <- Accounts.get_user_by_handle_or_credential(user_handle, credential_id),
+      with {:ok, user} <-
+             Accounts.get_user_by_handle_or_credential(maybe_user_handle, credential_id),
            aaguids = Enum.map(user.credentials, &UserCredential.aaguid_tuple/1) |> Map.new(),
            {:ok, _name} <-
              check_authenticator_status(credential_id, aaguids, challenge),
@@ -250,7 +256,8 @@ defmodule PasskeysWeb.UserLive.Login do
         )
       else
         {:error, %Ecto.Changeset{} = changeset} ->
-          put_flash(socket, :error, "Passkey authentication failed: #{inspect(changeset.errors)}")
+          errors = changeset |> translate_errors() |> Enum.join(" ")
+          put_flash(socket, :error, "Passkey authentication failed: #{errors}")
 
         {:error, reason} ->
           put_flash(socket, :error, "Passkey authentication failed: #{inspect(reason)}")
@@ -262,13 +269,40 @@ defmodule PasskeysWeb.UserLive.Login do
   def handle_event("credentials_get_failed", %{"error" => error} = params, socket) do
     Logger.error("credentials.get failed #{inspect(params)}")
 
-    socket = put_flash(socket, :error, "Passkey creation failed: #{error}")
+    socket = put_flash(socket, :error, "Passkey authentication failed: #{error}")
     {:noreply, socket}
   end
 
-  defp local_mail_adapter? do
-    Application.get_env(:passkeys, Passkeys.Mailer)[:adapter] == Swoosh.Adapters.Local
+  def handle_event("change_tab", %{"tab" => tab}, socket) do
+    socket = assign(socket, :active_tab, tab)
+    {:noreply, socket}
   end
+
+  # UI components
+
+  attr :active, :string, required: true
+  attr :value, :string, required: true
+  slot :inner_block
+
+  def tab(assigns) do
+    ~H"""
+    <li class="me-2">
+      <div
+        class={[
+          "inline-block p-4 rounded-t-lg",
+          (@active == @value && "font-semibold text-brand bg-base-300 active") || "hover:bg-base-300"
+        ]}
+        aria-current={if @active, do: "page"}
+        phx-click="change_tab"
+        phx-value-tab={@value}
+      >
+        {render_slot(@inner_block)}
+      </div>
+    </li>
+    """
+  end
+
+  # Private functions
 
   defp check_authenticator_status(credential_id, aaguids, challenge) do
     case Map.get(aaguids, credential_id) do

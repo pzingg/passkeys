@@ -68,7 +68,7 @@ defmodule Passkeys.MixProject do
       {:bandit, "~> 1.5"},
       {:tz, "~> 0.26"},
       {:x509, "~> 0.9"},
-      {:wax_, "~> 0.6"}
+      {:wax_, github: "pzingg/wax", branch: "verify_indirect_attestation"}
     ]
   end
 

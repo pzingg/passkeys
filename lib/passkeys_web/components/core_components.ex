@@ -363,7 +363,7 @@ defmodule PasskeysWeb.CoreComponents do
       end
 
     ~H"""
-    <table class="table table-zebra">
+    <table class="my-4 table table-zebra">
       <thead>
         <tr>
           <th :for={col <- @col}>{col[:label]}</th>
@@ -493,9 +493,18 @@ defmodule PasskeysWeb.CoreComponents do
   end
 
   @doc """
+  Translates all the errors in a changeset.
+  """
+  def translate_errors(%Ecto.Changeset{errors: errors}) do
+    for {field, {msg, opts}} <- errors do
+      "#{field} #{translate_error({msg, opts})}."
+    end
+  end
+
+  @doc """
   Translates the errors for a field from a keyword list of errors.
   """
-  def translate_errors(errors, field) when is_list(errors) do
+  def translate_errors(errors, field) when is_list(errors) and is_atom(field) do
     for {^field, {msg, opts}} <- errors, do: translate_error({msg, opts})
   end
 end

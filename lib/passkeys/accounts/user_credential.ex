@@ -14,7 +14,9 @@ defmodule Passkeys.Accounts.UserCredential do
     field :rp_id, :string
     field :cose_key, :map
     field :aaguid, :binary
-    field :resident?, :boolean
+    field :attachment, :string
+    field :transports, :string
+    field :resident_key?, :boolean
     field :sign_count, :integer
 
     belongs_to :user, Passkeys.Accounts.User
@@ -24,7 +26,15 @@ defmodule Passkeys.Accounts.UserCredential do
 
   def changeset(credential, attrs) do
     credential
-    |> cast(attrs, [:rp_id, :cose_key, :aaguid, :resident?, :sign_count])
+    |> cast(attrs, [
+      :rp_id,
+      :cose_key,
+      :aaguid,
+      :attachment,
+      :transports,
+      :resident_key?,
+      :sign_count
+    ])
   end
 
   def public_key_tuple(credential) do

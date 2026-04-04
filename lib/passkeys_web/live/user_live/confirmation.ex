@@ -22,6 +22,11 @@ defmodule PasskeysWeb.UserLive.Confirmation do
           phx-trigger-action={@trigger_submit}
         >
           <input type="hidden" name={@form[:token].name} value={@form[:token].value} />
+          <.input
+            type="checkbox"
+            field={@form[:register_passkey]}
+            label="Create passkey on confirmation"
+          />
           <.button
             name={@form[:remember_me].name}
             value="true"
@@ -75,7 +80,7 @@ defmodule PasskeysWeb.UserLive.Confirmation do
   @impl true
   def mount(%{"token" => token}, _session, socket) do
     if user = Accounts.get_user_by_magic_link_token(token) do
-      form = to_form(%{"token" => token}, as: "user")
+      form = to_form(%{"token" => token, "register_passkey" => true}, as: "user")
 
       {:ok, assign(socket, user: user, form: form, trigger_submit: false),
        temporary_assigns: [form: nil]}

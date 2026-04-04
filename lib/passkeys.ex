@@ -41,4 +41,8 @@ defmodule Passkeys do
         url
     end
   end
+
+  def local_mail_adapter? do
+    Application.get_env(:passkeys, Passkeys.Mailer)[:adapter] == Swoosh.Adapters.Local
+  end
 end

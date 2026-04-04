@@ -382,13 +382,13 @@ defmodule Passkeys.Accounts do
   @doc """
   List WebAuthn credentials for a user.
   """
-  def list_user_credentials(%{id: user_id}) when is_binary(user_id) do
+  def list_user_credentials(%{id: user_id}) when is_binary(user_id) and user_id != "" do
     UserCredential
     |> where([c], c.user_id == ^user_id)
     |> Repo.all()
   end
 
-  def list_user_credentials(%{email: email}) when is_binary(email) do
+  def list_user_credentials(%{email: email}) when is_binary(email) and email != "" do
     UserCredential
     |> join(:left, [c], u in assoc(c, :user))
     |> where([c, u], u.email == ^email)
@@ -435,12 +435,17 @@ defmodule Passkeys.Accounts do
   """
   def register_user_credential(
         %User{id: user_id},
-        challenge,
+        %{rp_id: rp_id} = challenge,
         raw_id_b64,
         attestation_object_b64,
-        client_data_json
+        client_data_json,
+        attachment,
+        transports,
+        resident_key?,
+        opts \\ []
       ) do
     attestation_object = Base.decode64!(attestation_object_b64)
+    transports = Enum.join(transports, ", ")
 
     # {:ok, att_data, _} = Wax.Utils.CBOR.decode(attestation_object)
     # Logger.debug("Wax: attestation object #{inspect(att_data)}")
@@ -459,17 +464,27 @@ defmodule Passkeys.Accounts do
            ),
          maybe_aaguid = Wax.AuthenticatorData.get_aaguid(authenticator_data),
          attrs = %{
-           rp_id: challenge.rp_id,
+           rp_id: rp_id,
            cose_key: cose_key,
-           aaguid: maybe_aaguid
+           aaguid: maybe_aaguid,
+           attachment: attachment,
+           transports: transports,
+           resident_key?: resident_key?
          },
          changeset =
            %UserCredential{id: raw_id_b64, user_id: user_id} |> change_user_credential(attrs),
          {:ok, credential} <- Repo.insert(changeset) do
+      deleted_count =
+        if Keyword.get(opts, :delete_stale?, false) do
+          delete_stale_user_credentials(credential) |> elem(0)
+        else
+          0
+        end
+
       Phoenix.PubSub.broadcast(
         Passkeys.PubSub,
         "credentials",
-        {:credential_created, credential}
+        {:credential_created, credential, deleted_count}
       )
 
       {:ok, credential}
@@ -513,6 +528,26 @@ defmodule Passkeys.Accounts do
         error
     end
   end
+
+  @doc """
+  Deletes previous user credentials with same user, RP and aaguid.
+  """
+  def delete_stale_user_credentials(%{
+        user_id: user_id,
+        rp_id: rp_id,
+        aaguid: aaguid,
+        id: except_credential_id
+      })
+      when is_binary(aaguid) do
+    UserCredential
+    |> where([c], c.user_id == ^user_id)
+    |> where([c], c.rp_id == ^rp_id)
+    |> where([c], c.aaguid == ^aaguid)
+    |> where([c], c.id != ^except_credential_id)
+    |> Repo.delete_all()
+  end
+
+  def delete_stale_user_credentials(_), do: {0, nil}
 
   @doc """
   Returns an `%Ecto.Changeset{}` for inserting or updating a user credential.

@@ -64,12 +64,17 @@ defmodule Passkeys.Accounts do
 
   @doc """
   Gets a single user. Returns {:ok, user} or error tuple.
+
+  `handle` is the UUID string (including hyphens), Base64 encoded.
+
   It's probably a better practice to create an additional
   unique random `handle` string in the `User` schema, and
   use that rather than exposing the primary key...
   """
-  def get_user_by_handle(handle) do
+  def get_user_by_handle(handle) when is_binary(handle) and handle != "" do
     try do
+      handle = Base.decode64!(handle)
+
       query =
         User
         |> where([u], u.id == ^handle)
@@ -81,13 +86,11 @@ defmodule Passkeys.Accounts do
       end
     rescue
       _ ->
-        if is_nil(handle) || handle == "" do
-          {:error, :no_user_handle}
-        else
-          {:error, :invalid_user_handle}
-        end
+        {:error, :invalid_user_handle}
     end
   end
+
+  def get_user_by_handle(_), do: {:error, :no_user_handle}
 
   @doc """
   Gets a single user. Returns {:ok, user} or error tuple.

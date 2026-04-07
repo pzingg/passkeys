@@ -217,10 +217,10 @@ defmodule PasskeysWeb.UserLive.Login do
     # Notes:
     #
     # `Accounts.get_user_by_handle` checks for missing or invalid formats for
-    # `user_handle` (which must be a UUID string) as well as if the user exists
-    # in the database. It's probably a better practice to create an additional
-    # unique random `handle` string in the `User` schema, and use that rather
-    # than exposing the primary key...
+    # `user_handle` (which is the user's UUID string, Base64 encoded) as well as
+    # if the user exists in the database. It's probably a better practice to
+    # create an additional unique random `handle` string in the `User` schema,
+    # and use that rather than exposing the primary key...
     #
     # The public keys that will be checked in `Wax.authenticate` are either from
     # `challenge.allow_credentials`, or if a resident key was used, the

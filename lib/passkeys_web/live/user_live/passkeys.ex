@@ -311,7 +311,7 @@ defmodule PasskeysWeb.UserLive.Passkeys do
       attestation: challenge.attestation,
       rp_id: challenge.rp_id,
       rp_name: "Passkeys",
-      user_handle: user.id,
+      user_handle: Base.encode64(user.id),
       user_email: user.email
     })
   end

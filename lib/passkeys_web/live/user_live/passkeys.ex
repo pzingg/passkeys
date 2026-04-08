@@ -131,7 +131,6 @@ defmodule PasskeysWeb.UserLive.Passkeys do
         socket
       ) do
     challenge = socket.assigns.webauthn_challenge
-    Logger.error("resident_key? #{resident_key?}")
 
     socket =
       case Accounts.register_user_credential(
@@ -143,7 +142,7 @@ defmodule PasskeysWeb.UserLive.Passkeys do
              attachment,
              transports,
              resident_key?,
-             delete_stale?: true
+             prune_stale_credentials?: Passkeys.prune_stale_credentials?()
            ) do
         {:ok, _credential} ->
           Logger.debug("Wax: successful registration for challenge #{inspect(challenge)}")
@@ -299,7 +298,7 @@ defmodule PasskeysWeb.UserLive.Passkeys do
 
   defp begin_passkey_registration(socket) do
     user = socket.assigns.current_scope.user
-    challenge = Wax.new_registration_challenge(attestation: "indirect")
+    challenge = Wax.new_registration_challenge()
 
     # It's probably a better practice to create an additional unique random `handle`
     # string in the `User` schema, and use that rather than exposing the
@@ -308,7 +307,6 @@ defmodule PasskeysWeb.UserLive.Passkeys do
     |> assign(:webauthn_challenge, challenge)
     |> push_event("trigger-attestation", %{
       challenge: Base.encode64(challenge.bytes),
-      attestation: challenge.attestation,
       rp_id: challenge.rp_id,
       rp_name: "Passkeys",
       user_handle: Base.encode64(user.id),

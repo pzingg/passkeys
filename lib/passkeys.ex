@@ -42,6 +42,10 @@ defmodule Passkeys do
     end
   end
 
+  def prune_stale_credentials? do
+    Application.get_env(:passkeys, :prune_stale_credentials, false)
+  end
+
   def local_mail_adapter? do
     Application.get_env(:passkeys, Passkeys.Mailer)[:adapter] == Swoosh.Adapters.Local
   end

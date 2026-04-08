@@ -478,7 +478,7 @@ defmodule Passkeys.Accounts do
            %UserCredential{id: raw_id_b64, user_id: user_id} |> change_user_credential(attrs),
          {:ok, credential} <- Repo.insert(changeset) do
       deleted_count =
-        if Keyword.get(opts, :delete_stale?, false) do
+        if Keyword.get(opts, :prune_stale_credentials?, false) do
           delete_stale_user_credentials(credential) |> elem(0)
         else
           0

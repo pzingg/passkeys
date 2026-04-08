@@ -74,7 +74,7 @@ Hooks.register_passkey = {
         console.log("getClientCapabilities not defined")
       }
     })
-    this.handleEvent("trigger-attestation", ({rp_id, rp_name, challenge, attestation, user_handle, user_email}) => {
+    this.handleEvent("trigger-attestation", ({rp_id, rp_name, challenge, user_handle, user_email}) => {
       const params = {
         publicKey: {
           challenge: _base64ToArrayBuffer(challenge),
@@ -87,19 +87,19 @@ Hooks.register_passkey = {
             name: user_email,
             displayName: user_email
           },
-          pubKeyCredParams: [
-            { type: "public-key", alg: -8}, // "EdDSA" IANA COSE Algorithms registry
-            { type: "public-key", alg: -7}, // "ES256" IANA COSE Algorithms registry
-            { type: "public-key", alg: -257} // "RS256" IANA COSE Algorithms registry
-          ],
-          extensions: {
-            credProps: true
-          },
-          attestation: attestation,
+          attestation: "direct",
           authenticatorSelection: {
             residentKey: "required",
             requireResidentKey: true,
-          }
+          },
+          extensions: {
+            credProps: true
+          },
+          pubKeyCredParams: [
+            { type: "public-key", alg: -8},  // "EdDSA"
+            { type: "public-key", alg: -7},  // "ES256"
+            { type: "public-key", alg: -257} // "RS256"
+          ]
         }
       }
 

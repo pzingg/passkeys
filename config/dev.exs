@@ -68,6 +68,10 @@ config :passkeys, PasskeysWeb.Endpoint,
 # Enable dev routes for dashboard and mailbox
 config :passkeys, dev_routes: true
 
+# When a new credential is created, remove older credentials with matching aaguid,
+# rp_id, and user_id
+config :passkeys, prune_stale_credentials: true
+
 # Do not include metadata nor timestamps in development logs
 config :logger, :default_formatter, format: "[$level] $message\n"
 
@@ -91,15 +95,14 @@ config :swoosh, :api_client, false
 
 # Wax configuration
 #
-# Using attestation: "direct" to get aaguid from hardware keys
-#
 # For testing with dev server:
+#
 # ngrok http 4000
 # WAX_ORIGIN=https://8baa-2601-645-d81-dd60-5613-79ff-fe93-6d2d.ngrok-free.app mix phx.server
 config :wax_,
   origin: System.get_env("WAX_ORIGIN", "http://localhost:4000"),
   rp_id: :auto,
+  allowed_attestation_types: [:basic, :uncertain, :attca, :self],
   timeout: 300,
   update_metadata: true,
-  allowed_attestation_types: [:basic, :uncertain, :attca, :self],
   metadata_dir: "priv/fido2_metadata/"

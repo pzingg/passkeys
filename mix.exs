@@ -68,7 +68,9 @@ defmodule Passkeys.MixProject do
       {:bandit, "~> 1.5"},
       {:tz, "~> 0.26"},
       {:x509, "~> 0.9"},
-      {:wax_, github: "pzingg/wax", branch: "verify_indirect_attestation"}
+      {:wax_,
+       github: "tanguilp/wax",
+       branch: "tl/remove_attestation_conveyance_preference_check_in_atetstation_statement_impls"}
     ]
   end
 

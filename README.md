@@ -164,25 +164,22 @@ There are two issues:
   1. obtaining the aaguid from a hardware security key
   2. matching the returned attestation value to the requested conveyance
 
-The results from testing passkey credential creation in Wax 0.7 with different 
-values for the `:attestation` option:
+Using Wax 0.8 (actually the 
+`tl/remove_attestation_conveyance_preference_check_in_atetstation_statement_impls` branch
+that will be merged into version 0.8), I tried different values for the `attestation` 
+option of `PublicKeyCredentialCreationOptions` when calling `navigator.credentials.create`:
 
 | Attestation | Enpass | USB Security Key |
 | ----------- | ------ | ---------------- |
-| none (default) | **OK, with aaguid** | OK, no aaguid returned |
-| direct | ERROR verifying format `:none` | **OK, with aaguid** |
-| indirect | ERROR verifying format `:none` | ERROR verifying format `:packed` |
+| direct | **OK, with aaguid** | **OK, with aaguid** |
+| indirect | **OK, with aaguid** | OK, no aaguid returned |
 
-The ERROR is a `Wax.AttestationVerificationError` with reason 
-`:invalid_attestation_conveyance_preference`.
+So I will use "direct". 
 
-I have forked the Wax libary to accept "indirect" as a viable conveyance preference
-for both the `:none` and `:packed` attestation formats. This problem will be removed in Wax 0.8.
-
-Note: if we cannot get the aaguid, from the response we can possibly identify 
+Note: if you do not get the aaguid from the response, you can possibly identify 
 at least the generic type of the authenticator from the 
 `credential.authenticatorAttachment` and `credential.response.getTransports()` 
-data. This information is now displayed to the user. In addition we pull the 
+data. This information is now displayed to the user. In addition I pull the 
 `credProps` extension  information to ascertain and present whether the credential 
 has a resident key (aka is "discoverable").
 
@@ -191,6 +188,37 @@ has a resident key (aka is "discoverable").
 | Enpass | cross-platform | internal | true |
 | USB security key | cross-platform | nfc, usb | true |
 | Built-in device | platform? | internal? | varies? |
+
+So, besides the `challenge`, `rp`, and `user` options for `navigator.credentials.create`, 
+the rest are:
+
+```javascript
+{
+  attestation: "direct",
+  authenticatorSelection: {
+    residentKey: "required",
+    requireResidentKey: true,
+  },
+  extensions: {
+    credProps: true
+  },
+  pubKeyCredParams: [
+    { type: "public-key", alg: -8},  // "EdDSA"
+    { type: "public-key", alg: -7},  // "ES256"
+    { type: "public-key", alg: -257} // "RS256"
+  ]
+}
+```
+
+And for the `Wax.Challenge` object, the configuration options in dev.exs are:
+
+```elixir
+[
+  origin: System.get_env("WAX_ORIGIN", "http://localhost:4000"),
+  rp_id: :auto,
+  allowed_attestation_types: [:basic, :uncertain, :attca, :self]
+]
+```
 
 ### Enpass "Update Item" vs "Save as New"
 
@@ -210,7 +238,8 @@ You can also delete the entire item in the Enpass application (thereby destroyin
 the passkey), but I don't find a way to remove a passkey from an Enpass item 
 leaving the other information intact (username and password for example).
 
-The current logic deletes all previous passkeys with matching `aaguid`, `rp_id` and `user_id`
+If `true`, the boolean configuration setting `:prune_stale_credentials` will
+delete all previous passkeys with matching `aaguid`, `rp_id` and `user_id`
 when a new passkey is inserted. This does not solve the use case where a user may
 have multiple USB security keys with the same `aaguid`...
 

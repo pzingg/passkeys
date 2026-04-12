@@ -74,58 +74,40 @@ Passkey registration can be offered:
   by other means (magic link or password)
 3. From the passkeys page, after you have authenticated by other means
 
-#### Options for navigator.credentials.create
+#### Attestation issues
 
-Here is the JSON for the options sent by `passkeys-demo`:
+The application has been tested with both Enpass and a USB security key device.
+There are two issues: 
 
-```json
-{
-  "publicKey": {
-    "attestation": "none",
-    "authenticatorSelection": {
-      "authenticatorAttachment": "platform",
-      "requireResidentKey": true
-    },
-    "challenge": {},
-    "excludeCredentials": [],
-    "extensions": {
-      "credProps": true,
-      "enforceCredentialProtectionPolicy": false
-    },
-    "hints": [],
-    "pubKeyCredParams": [
-      { "alg": -8, "type": "public-key" },
-      { "alg": -7, "type": "public-key" },
-      { "alg": -257, "type": "public-key" }
-    ],
-    "rp": {
-      "name": "Passkeys Demo",
-      "id": "passkeys-demo.appspot.com"
-    },
-    "timeout": 60000,
-    "user": { "name": "user", "displayName": "user", "id": {} }
-  },
-  "signal": {},
-  "mediation": "conditional"
-}
-```
+  1. obtaining the aaguid from a hardware security key
+  2. matching the returned attestation value to the requested conveyance
 
-And here is the JSON of the the options used by `wax_demo`:
+Using Wax 0.8 (actually the 
+`tl/remove_attestation_conveyance_preference_check_in_atetstation_statement_impls` branch
+that will be merged into version 0.8), I tried different values for the `attestation` 
+option of `PublicKeyCredentialCreationOptions` when calling `navigator.credentials.create`:
 
-```json
-{
-  "publicKey": {
-    "challenge": {},
-    "rp": { "id": "localhost", "name": "Wax FTW" },
-    "user": { "id": {}, "name": "user", "displayName": "user" },
-    "pubKeyCredParams": [{ "type": "public-key", "alg": -7 }],
-    "attestation": "none",
-    "authenticatorSelection": { "residentKey": "preferred" }
-  }
-}
-```
+| Attestation | Enpass | USB Security Key |
+| ----------- | ------ | ---------------- |
+| direct | **OK, with aaguid** | **OK, with aaguid** |
+| indirect | **OK, with aaguid** | OK, no aaguid returned |
 
-### Client capabilities
+So "direct" seems to work best for retrieving aaguids. 
+
+Note: if you do not get the aaguid from the response, you can possibly identify 
+at least the generic type of the authenticator from the 
+`credential.authenticatorAttachment` and `credential.response.getTransports()` 
+data. This information is now displayed to the user. In addition I pull the 
+`credProps` extension  information to ascertain and present whether the credential 
+has a resident key (aka is "discoverable").
+
+| Authenticator | Attachment | Transports | Resident Key |
+| ------------- | ---------- | ---------- | ------------ |
+| Enpass | cross-platform | internal | true |
+| USB security key | cross-platform | nfc, usb | true |
+| Built-in device | platform? | internal? | varies? |
+
+#### Client capabilities
 
 On my Linux machine this is what I get from `PublicKeyCredential.getClientCapabilities()`:
 
@@ -156,41 +138,81 @@ On my Linux machine this is what I get from `PublicKeyCredential.getClientCapabi
 Ideally, a capability like `signalAllAcceptedCredentials` could be used to manage
 syncing between the RP database of current passkeys and the related authenticator.
 
-### Attestation issues
+#### Options for navigator.credentials.create
 
-I'm trying to get things working with both Enpass and a USB security key device.
-There are two issues: 
+Here are the options sent by `passkeys-demo`:
 
-  1. obtaining the aaguid from a hardware security key
-  2. matching the returned attestation value to the requested conveyance
+```javascript
+{
+  publicKey: {
+    attestation: "none",
+    authenticatorSelection: {
+      authenticatorAttachment: "platform",
+      requireResidentKey: true
+    },
+    challenge: {},
+    excludeCredentials: [],
+    extensions: {
+      credProps: true,
+      enforceCredentialProtectionPolicy: false
+    },
+    hints: [],
+    pubKeyCredParams: [
+      { alg: -8, type: "public-key" },
+      { alg: -7, type: "public-key" },
+      { alg: -257, type: "public-key" }
+    ],
+    rp: {
+      id: "passkeys-demo.appspot.com",
+      name: "Passkeys Demo"
+    },
+    timeout: 60000,
+    user: { name: "user", displayName: "user", id: {} }
+  },
+  signal: {},
+  mediation: "conditional"
+}
+```
 
-Using Wax 0.8 (actually the 
-`tl/remove_attestation_conveyance_preference_check_in_atetstation_statement_impls` branch
-that will be merged into version 0.8), I tried different values for the `attestation` 
-option of `PublicKeyCredentialCreationOptions` when calling `navigator.credentials.create`:
+And here are the options used by `wax_demo`:
 
-| Attestation | Enpass | USB Security Key |
-| ----------- | ------ | ---------------- |
-| direct | **OK, with aaguid** | **OK, with aaguid** |
-| indirect | **OK, with aaguid** | OK, no aaguid returned |
+```javascript
+{
+  publicKey: {
+    attestation: "none",
+    authenticatorSelection: { 
+      residentKey: "preferred" 
+    },
+    challenge: {},
+    pubKeyCredParams: [
+      { alg: -7, type: "public-key" }
+    ],
+    rp: { 
+      id: "localhost", 
+      name: "Wax FTW" 
+    },
+    user: { 
+      id: {}, 
+      name: "user", 
+      displayName: "user" 
+    }
+  }
+}
+```
 
-So I will use "direct". 
+For the `Wax.Challenge` object, the configuration options we use 
+in dev.exs are:
 
-Note: if you do not get the aaguid from the response, you can possibly identify 
-at least the generic type of the authenticator from the 
-`credential.authenticatorAttachment` and `credential.response.getTransports()` 
-data. This information is now displayed to the user. In addition I pull the 
-`credProps` extension  information to ascertain and present whether the credential 
-has a resident key (aka is "discoverable").
+```elixir
+[
+  origin: System.get_env("WAX_ORIGIN", "http://localhost:4000"),
+  rp_id: :auto,
+  allowed_attestation_types: [:basic, :uncertain, :attca, :self]
+]
+```
 
-| Authenticator | Attachment | Transports | Resident Key |
-| ------------- | ---------- | ---------- | ------------ |
-| Enpass | cross-platform | internal | true |
-| USB security key | cross-platform | nfc, usb | true |
-| Built-in device | platform? | internal? | varies? |
-
-So, besides the `challenge`, `rp`, and `user` options for `navigator.credentials.create`, 
-the rest are:
+And besides the `challenge`, `rp`, and `user`, the options we are using for 
+`navigator.credentials.create` are:
 
 ```javascript
 {
@@ -203,21 +225,11 @@ the rest are:
     credProps: true
   },
   pubKeyCredParams: [
-    { type: "public-key", alg: -8},  // "EdDSA"
-    { type: "public-key", alg: -7},  // "ES256"
-    { type: "public-key", alg: -257} // "RS256"
+    { alg: -8, type: "public-key"},
+    { alg: -7, type: "public-key"},
+    { alg: -257, type: "public-key"}
   ]
 }
-```
-
-And for the `Wax.Challenge` object, the configuration options in dev.exs are:
-
-```elixir
-[
-  origin: System.get_env("WAX_ORIGIN", "http://localhost:4000"),
-  rp_id: :auto,
-  allowed_attestation_types: [:basic, :uncertain, :attca, :self]
-]
 ```
 
 ### Enpass "Update Item" vs "Save as New"
@@ -266,7 +278,7 @@ I have also seen this error, when canceling out of Enpass:
 - "Your device can't be used with this site. ...ngrok-free.app may require a 
   newer or different kind of device."
 
-### Non fido-approved metadata
+### Non FIDO-approved metadata
 
 The `Wax` library will fail to authenticate with the error "Authenticator 
 metadata was not found" if the authenticator's aaguid was not loaded from the 

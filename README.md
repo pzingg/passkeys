@@ -278,6 +278,17 @@ I have also seen this error, when canceling out of Enpass:
 - "Your device can't be used with this site. ...ngrok-free.app may require a 
   newer or different kind of device."
 
+
+### On iOS
+
+When you click "Create Passkey" on iOS with Enpass app installed and registered as
+a passkey store the system brings up this modal dialog:
+
+Add a passkey?
+
+"example.com" supports passkeys, a stronger alternative to passwords that cannot
+be leaked or stolen. A passkey for "user@example.com" will be saved in "Enpass".
+
 ### Non FIDO-approved metadata
 
 The `Wax` library will fail to authenticate with the error "Authenticator 

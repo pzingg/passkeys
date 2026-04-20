@@ -117,19 +117,36 @@ defmodule PasskeysWeb.UserLive.Passkeys do
     {:noreply, socket}
   end
 
+  @doc """
+  Event sent from the Javascript Hook with the result of
+  `navigator.credentials.create`.
+
+  On iOS, this is the message received:
+
+  %{
+    "attachment" => "platform",
+    "attestation_object" => "o2NmbXRk...EY0=",
+    "client_data_json" => "{\"type\":\"webauthn.create\",\"challenge\":\"MdfP4FrdQzDmQxAT19-87CFRCBsI321F1vF1To7ahX0\",\"origin\":\"https://6f86-2601-645-d81-dd60-5613-79ff-fe93-6d2d.ngrok-free.app\",\"crossOrigin\":false}",
+    "raw_id" => "dHCeb5aZ5u6HjqV9VZS02+bfp49KyVGyKzZjiezSxew=",
+    "transports" => ["internal", "hybrid"],
+    "type" => "public-key"
+  }
+
+  "resident_key" is not returned.
+  """
   def handle_event(
         "credential_created",
         %{
           "type" => _type,
-          "raw_id" => raw_id_b64,
-          "client_data_json" => client_data_json,
-          "attestation_object" => attestation_object_b64,
           "attachment" => attachment,
+          "attestation_object" => attestation_object_b64,
+          "client_data_json" => client_data_json,
           "transports" => transports,
-          "resident_key" => resident_key?
-        },
+          "raw_id" => raw_id_b64
+        } = params,
         socket
       ) do
+    resident_key? = Map.get(params, "resident_key")
     challenge = socket.assigns.webauthn_challenge
 
     socket =
